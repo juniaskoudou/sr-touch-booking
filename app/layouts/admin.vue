@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { t } from '@/lib/translations';
-import { Calendar, Scissors, LayoutDashboard } from 'lucide-vue-next';
+import { authClient } from '@/lib/auth-client';
+import { Calendar, Scissors, LayoutDashboard, LogOut } from 'lucide-vue-next';
 
 const route = useRoute();
+const router = useRouter();
+
+const userEmail = ref<string | null>(null);
+const loggingOut = ref(false);
 
 const navItems = [
   { label: t.admin.dashboard, href: '/admin', icon: LayoutDashboard },
@@ -13,6 +18,27 @@ const navItems = [
 const isActive = (href: string) => {
   if (href === '/admin') return route.path === '/admin';
   return route.path.startsWith(href);
+};
+
+onMounted(async () => {
+  try {
+    const session = await $fetch('/api/auth/get-session');
+    userEmail.value = session?.user?.email || null;
+  } catch {
+    // Middleware should have caught this
+  }
+});
+
+const handleLogout = async () => {
+  try {
+    loggingOut.value = true;
+    await authClient.signOut();
+    router.push('/admin/login');
+  } catch (err) {
+    console.error('Error logging out:', err);
+  } finally {
+    loggingOut.value = false;
+  }
 };
 </script>
 
@@ -46,12 +72,23 @@ const isActive = (href: string) => {
         </nav>
 
         <!-- Right side -->
-        <div class="ml-auto flex items-center gap-2">
+        <div class="ml-auto flex items-center gap-3">
+          <span v-if="userEmail" class="text-xs text-muted-foreground hidden sm:inline">
+            {{ userEmail }}
+          </span>
           <button
             @click="navigateTo('/')"
             class="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-accent/50"
           >
             Voir le site
+          </button>
+          <button
+            @click="handleLogout"
+            :disabled="loggingOut"
+            class="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-accent/50"
+          >
+            <LogOut class="h-3.5 w-3.5" />
+            <span>{{ t.admin.logout }}</span>
           </button>
         </div>
       </div>

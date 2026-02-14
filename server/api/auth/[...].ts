@@ -1,4 +1,5 @@
-// Auth routes - disabled for dev, will be enabled later
+import { auth } from '../../auth';
+
 export default defineEventHandler(async (event) => {
-  return { message: 'Auth disabled for development' };
+  return auth.handler(toWebRequest(event));
 });

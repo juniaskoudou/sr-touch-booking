@@ -14,6 +14,8 @@ const bodySchema = z.object({
 });
 
 export default defineEventHandler(async (event) => {
+  await verifyAdminAccess(event);
+
   const body = await readBody(event);
 
   try {

@@ -2,13 +2,14 @@ import { db } from '../../database';
 import { bookings, services, bookingAddons, serviceCategories } from '../../database/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { generateToken } from '../../utils/auth';
-import { sendBookingRequestEmail } from '../../utils/email';
+import { sendBookingRequestEmail, sendAdminNewBookingNotification } from '../../utils/email';
 import { z } from 'zod';
 
 const bookingSchema = z.object({
   serviceId: z.number(),
   customerName: z.string().min(1),
   customerEmail: z.string().email(),
+  customerPhone: z.string().optional(),
   bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   bookingTime: z.string().regex(/^\d{2}:\d{2}$/),
   addonIds: z.array(z.number()).optional().default([]),
@@ -63,6 +64,7 @@ export default defineEventHandler(async (event) => {
         serviceId: data.serviceId,
         customerName: data.customerName,
         customerEmail: data.customerEmail,
+        customerPhone: data.customerPhone || null,
         bookingDate,
         bookingTime: `${data.bookingTime}:00`,
         status: 'pending',
@@ -82,13 +84,21 @@ export default defineEventHandler(async (event) => {
     }
 
     // Send "booking request received" email (non-blocking)
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    const baseUrl = process.env.BASE_URL || getRequestURL(event).origin;
     const bookingUrl = `${baseUrl}/booking/${token}`;
 
     try {
       await sendBookingRequestEmail(booking, service[0].service, bookingUrl);
     } catch (emailErr) {
       console.error('Email sending failed (booking still created):', emailErr);
+    }
+
+    // Notify admin (salon owner) about the new booking
+    const adminUrl = `${baseUrl}/admin/bookings`;
+    try {
+      await sendAdminNewBookingNotification(booking, service[0].service, adminUrl);
+    } catch (emailErr) {
+      console.error('Admin notification email failed:', emailErr);
     }
 
     return {

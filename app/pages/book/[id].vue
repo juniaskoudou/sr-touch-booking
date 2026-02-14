@@ -46,9 +46,11 @@ const selectedAddonIds = ref<Set<number>>(new Set());
 const openDates = ref<OpenDate[]>([]);
 const loadingDates = ref(true);
 
-const customerName = ref('');
-const customerPhone = ref('');
-const customerEmail = ref('');
+// Pre-populate customer info from query params (e.g. when rescheduling)
+const query = route.query;
+const customerName = ref((query.name as string) || '');
+const customerPhone = ref((query.phone as string) || '');
+const customerEmail = ref((query.email as string) || '');
 const phoneTouched = ref(false);
 const submitting = ref(false);
 const bookingError = ref<string | null>(null);
@@ -200,6 +202,7 @@ const handleSubmit = async () => {
         serviceId: service.value!.id,
         customerName: customerName.value.trim(),
         customerEmail: customerEmail.value.trim(),
+        customerPhone: customerPhone.value.trim() || undefined,
         bookingDate,
         bookingTime: selectedTime.value,
         addonIds: Array.from(selectedAddonIds.value),

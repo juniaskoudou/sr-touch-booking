@@ -56,7 +56,7 @@ export default defineTask({
         }
 
         try {
-          const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+          const baseUrl = useRuntimeConfig().baseUrl;
           const bookingUrl = `${baseUrl}/booking/${booking.token}`;
           
           const result = await sendReminderEmail(booking, service, bookingUrl);

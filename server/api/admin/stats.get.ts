@@ -3,7 +3,7 @@ import { bookings } from '../../database/schema';
 import { eq, gte, and, lte, or, asc } from 'drizzle-orm';
 
 export default defineEventHandler(async (event) => {
-  // Auth disabled for dev - will be enabled later
+  await verifyAdminAccess(event);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);

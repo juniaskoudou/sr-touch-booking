@@ -2,7 +2,9 @@ import { db } from '../../database';
 import { availability } from '../../database/schema';
 import { asc } from 'drizzle-orm';
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+  await verifyAdminAccess(event);
+
   try {
     const records = await db
       .select()

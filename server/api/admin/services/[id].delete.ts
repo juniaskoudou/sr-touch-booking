@@ -3,6 +3,8 @@ import { services, bookings } from '../../../database/schema';
 import { eq, and, or } from 'drizzle-orm';
 
 export default defineEventHandler(async (event) => {
+  await verifyAdminAccess(event);
+
   const id = parseInt(getRouterParam(event, 'id') || '');
   if (isNaN(id)) {
     throw createError({ statusCode: 400, message: 'ID invalide' });

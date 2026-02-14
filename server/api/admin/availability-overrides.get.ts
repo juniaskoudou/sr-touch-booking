@@ -3,6 +3,8 @@ import { availabilityOverrides } from '../../database/schema';
 import { asc, gte } from 'drizzle-orm';
 
 export default defineEventHandler(async (event) => {
+  await verifyAdminAccess(event);
+
   const query = getQuery(event);
 
   try {

@@ -186,7 +186,14 @@ onMounted(() => {
         <div v-if="booking.status === 'pending' || booking.status === 'confirmed'" class="space-y-3">
           <Button
             v-if="booking.status === 'confirmed'"
-            @click="navigateTo(`/book/${service.id}`)"
+            @click="navigateTo({
+              path: `/book/${service.id}`,
+              query: {
+                name: booking.customerName,
+                email: booking.customerEmail,
+                phone: booking.customerPhone || undefined,
+              }
+            })"
             variant="outline"
             class="w-full rounded-xl py-5 text-sm font-medium"
           >

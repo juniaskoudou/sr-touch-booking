@@ -3,7 +3,7 @@ import { bookings, services } from '../../database/schema';
 import { eq, desc } from 'drizzle-orm';
 
 export default defineEventHandler(async (event) => {
-  // Auth disabled for dev - will be enabled later
+  await verifyAdminAccess(event);
 
   const query = getQuery(event);
   const limit = query.limit ? parseInt(query.limit as string) : 50;

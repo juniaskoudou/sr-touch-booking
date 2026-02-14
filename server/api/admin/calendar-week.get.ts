@@ -3,6 +3,8 @@ import { availability, availabilityOverrides, bookings, services } from '../../d
 import { eq, and, gte, lte, asc, desc, or } from 'drizzle-orm';
 
 export default defineEventHandler(async (event) => {
+  await verifyAdminAccess(event);
+
   const query = getQuery(event);
   const startStr = query.start as string;
 

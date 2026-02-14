@@ -11,7 +11,7 @@ const updateSchema = z.object({
 });
 
 export default defineEventHandler(async (event) => {
-  // await requireAdminAuth(event); // Disabled for dev
+  await verifyAdminAccess(event);
 
   const idParam = getRouterParam(event, 'id');
   const body = await readBody(event);
@@ -93,7 +93,7 @@ export default defineEventHandler(async (event) => {
 
     // Send confirmation email when booking is confirmed
     if (data.action === 'confirm' || data.action === 'reschedule') {
-      const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+      const baseUrl = process.env.BASE_URL || getRequestURL(event).origin;
       const bookingUrl = `${baseUrl}/booking/${currentBooking.token}`;
 
       try {

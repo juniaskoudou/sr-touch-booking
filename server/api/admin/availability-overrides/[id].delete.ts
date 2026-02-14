@@ -3,6 +3,8 @@ import { availabilityOverrides } from '../../../database/schema';
 import { eq } from 'drizzle-orm';
 
 export default defineEventHandler(async (event) => {
+  await verifyAdminAccess(event);
+
   const id = parseInt(getRouterParam(event, 'id') || '');
 
   if (isNaN(id)) {

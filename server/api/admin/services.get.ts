@@ -3,6 +3,8 @@ import { services, serviceCategories } from '../../database/schema';
 import { eq, desc } from 'drizzle-orm';
 
 export default defineEventHandler(async (event) => {
+  await verifyAdminAccess(event);
+
   try {
     const allServices = await db
       .select({

@@ -16,5 +16,11 @@ export default defineNuxtConfig({
      * @default "@/components/ui"
      */
     componentDir: '@/components/ui'
-  }
+  },
+  nitro: {
+    // Scheduled tasks disabled for dev
+    // scheduledTasks: {
+    //   '0 9 * * *': ['reminder-emails'],
+    // },
+  },
 })

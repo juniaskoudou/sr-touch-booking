@@ -9,10 +9,16 @@ function isAllowedEmail(email: string): boolean {
   return !!allowed && email.toLowerCase() === allowed.toLowerCase();
 }
 
+// Ensure URL has a protocol prefix
+function ensureProtocol(url: string): string {
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `https://${url}`;
+}
+
 // Resolve the base URL: explicit BASE_URL > NUXT_BASE_URL > Vercel auto-URL > localhost
 function getBaseURL(): string {
-  if (process.env.BASE_URL) return process.env.BASE_URL;
-  if (process.env.NUXT_BASE_URL) return process.env.NUXT_BASE_URL;
+  if (process.env.BASE_URL) return ensureProtocol(process.env.BASE_URL);
+  if (process.env.NUXT_BASE_URL) return ensureProtocol(process.env.NUXT_BASE_URL);
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   return 'http://localhost:3000';

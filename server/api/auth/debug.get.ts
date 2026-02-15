@@ -1,3 +1,5 @@
+import { sql } from 'drizzle-orm';
+
 export default defineEventHandler(async () => {
   // Temporary debug endpoint - REMOVE after fixing the issue
   const checks: Record<string, any> = {};
@@ -19,16 +21,17 @@ export default defineEventHandler(async () => {
   // Check DB connection
   try {
     const { db } = await import('../../database');
-    const result = await db.execute({ sql: 'SELECT 1 as ok', params: [] } as any);
+    await db.execute(sql`SELECT 1`);
     checks.database = 'connected';
   } catch (error: any) {
     checks.database = `error: ${error.message}`;
   }
 
-  // Check if better-auth can be imported
+  // Check if better-auth can be imported and show resolved baseURL
   try {
     const { auth } = await import('../../auth');
     checks.auth = 'loaded';
+    checks.resolvedBaseURL = auth.options.baseURL;
   } catch (error: any) {
     checks.auth = `error: ${error.message}`;
   }

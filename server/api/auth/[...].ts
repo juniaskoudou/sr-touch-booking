@@ -1,5 +1,10 @@
 import { auth } from '../../auth';
 
 export default defineEventHandler(async (event) => {
-  return auth.handler(toWebRequest(event));
+  try {
+    return await auth.handler(toWebRequest(event));
+  } catch (error) {
+    console.error('[Auth Handler Error]', error);
+    throw error;
+  }
 });

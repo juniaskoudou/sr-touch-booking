@@ -83,6 +83,7 @@ export const t = {
     rescheduleBooking: 'Reporter la réservation',
     markCompleted: 'Marquer comme terminée',
     pendingBookings: 'En attente de confirmation',
+    hours: 'Horaires',
   },
 
   // Salon Info

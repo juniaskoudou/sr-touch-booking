@@ -1,6 +1,28 @@
 import { db } from '../../database';
 import { availability, availabilityOverrides, bookings, services } from '../../database/schema';
-import { eq, and, gte, lte, asc, desc, or } from 'drizzle-orm';
+import { eq, and, gte, lte, asc, or } from 'drizzle-orm';
+
+/**
+ * Generate an array of YYYY-MM-DD strings starting from startStr for count days.
+ * Uses UTC noon to avoid timezone day-shift issues.
+ */
+function generateDateRange(startStr: string, count: number): string[] {
+  const dates: string[] = [];
+  const d = new Date(startStr + 'T12:00:00Z');
+  for (let i = 0; i < count; i++) {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    dates.push(`${y}-${m}-${day}`);
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return dates;
+}
+
+function dayOfWeekFromDateStr(dateStr: string): number {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  return d.getUTCDay();
+}
 
 export default defineEventHandler(async (event) => {
   await verifyAdminAccess(event);
@@ -12,10 +34,13 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'start parameter required (YYYY-MM-DD)' });
   }
 
-  const startDate = new Date(startStr + 'T00:00:00');
-  const endDate = new Date(startDate);
-  endDate.setDate(endDate.getDate() + 6);
-  const endStr = endDate.toISOString().split('T')[0];
+  // Generate 7 date strings starting from startStr (timezone-safe)
+  const weekDateStrs = generateDateRange(startStr, 7);
+  const endStr = weekDateStrs[weekDateStrs.length - 1];
+
+  // For booking queries, use explicit UTC timestamps
+  const startDate = new Date(startStr + 'T00:00:00Z');
+  const endDate = new Date(endStr + 'T23:59:59.999Z');
 
   try {
     // 1. Fetch recurring schedule
@@ -53,11 +78,8 @@ export default defineEventHandler(async (event) => {
 
     // 4. Build 7 days
     const days = [];
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(startDate);
-      date.setDate(date.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
-      const dayOfWeek = date.getDay();
+    for (const dateStr of weekDateStrs) {
+      const dayOfWeek = dayOfWeekFromDateStr(dateStr);
 
       // Resolve availability
       const dayOverrides = overrides.filter((o) => o.date === dateStr);
@@ -109,7 +131,9 @@ export default defineEventHandler(async (event) => {
       // Filter bookings for this date
       const dayBookings = weekBookings
         .filter(({ booking }) => {
-          const bDate = new Date(booking.bookingDate).toISOString().split('T')[0];
+          const bDate = booking.bookingDate instanceof Date
+            ? booking.bookingDate.toISOString().split('T')[0]
+            : String(booking.bookingDate).split('T')[0];
           return bDate === dateStr;
         })
         .map(({ booking, service }) => ({

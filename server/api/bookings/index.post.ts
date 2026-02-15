@@ -1,5 +1,5 @@
 import { db } from '../../database';
-import { bookings, services, bookingAddons, serviceCategories } from '../../database/schema';
+import { bookings, services, bookingAddons, serviceCategories, emailLogs } from '../../database/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { generateToken } from '../../utils/auth';
 import { sendBookingRequestEmail, sendAdminNewBookingNotification } from '../../utils/email';
@@ -83,14 +83,32 @@ export default defineEventHandler(async (event) => {
       );
     }
 
-    // Send "booking request received" email (non-blocking)
+    // Send "booking request received" email
     const baseUrl = process.env.BASE_URL || getRequestURL(event).origin;
     const bookingUrl = `${baseUrl}/booking/${token}`;
 
     try {
-      await sendBookingRequestEmail(booking, service[0].service, bookingUrl);
+      const emailResult = await sendBookingRequestEmail(booking, service[0].service, bookingUrl);
+
+      // Log email result
+      await db.insert(emailLogs).values({
+        bookingId: booking.id,
+        emailType: 'booking_request',
+        status: emailResult.success ? 'sent' : 'failed',
+        errorMessage: emailResult.success ? null : String(emailResult.error),
+      });
+
+      if (!emailResult.success) {
+        console.error('Booking request email failed for booking', booking.id, ':', emailResult.error);
+      }
     } catch (emailErr) {
       console.error('Email sending failed (booking still created):', emailErr);
+      await db.insert(emailLogs).values({
+        bookingId: booking.id,
+        emailType: 'booking_request',
+        status: 'failed',
+        errorMessage: String(emailErr),
+      }).catch(() => {});
     }
 
     // Notify admin (salon owner) about the new booking

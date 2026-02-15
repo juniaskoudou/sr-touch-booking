@@ -1,13 +1,45 @@
 import { db } from '../../database';
 import { availability, availabilityOverrides, bookings } from '../../database/schema';
 import { eq, and, gte, lte, or, asc } from 'drizzle-orm';
-import { format, parse, addMinutes, eachDayOfInterval, addDays, startOfDay } from 'date-fns';
+import { parse, addMinutes } from 'date-fns';
 import { z } from 'zod';
 
 const querySchema = z.object({
   serviceId: z.string().transform(Number),
   days: z.string().transform(Number).optional().default('30'),
 });
+
+/**
+ * Generate an array of YYYY-MM-DD strings from startDateStr for `count` days.
+ * Uses UTC noon to avoid any timezone day-shift issues.
+ */
+function generateDateStrings(startDateStr: string, count: number): string[] {
+  const dates: string[] = [];
+  const d = new Date(startDateStr + 'T12:00:00Z');
+  for (let i = 0; i < count; i++) {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    dates.push(`${y}-${m}-${day}`);
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return dates;
+}
+
+function dayOfWeekFromDateStr(dateStr: string): number {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  return d.getUTCDay();
+}
+
+function getTomorrowStr(): string {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const y = tomorrow.getFullYear();
+  const m = String(tomorrow.getMonth() + 1).padStart(2, '0');
+  const d = String(tomorrow.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -29,10 +61,10 @@ export default defineEventHandler(async (event) => {
 
     const serviceDuration = service[0].durationMinutes;
 
-    // Date range: tomorrow → tomorrow + days
-    const tomorrow = addDays(startOfDay(new Date()), 1);
-    const endDate = addDays(tomorrow, days);
-    const allDates = eachDayOfInterval({ start: tomorrow, end: endDate });
+    // Date range: tomorrow → tomorrow + days (all as YYYY-MM-DD strings)
+    const startStr = getTomorrowStr();
+    const allDateStrs = generateDateStrings(startStr, days);
+    const endStr = allDateStrs[allDateStrs.length - 1];
 
     // Fetch recurring weekly schedule
     const recurringSchedule = await db
@@ -42,9 +74,6 @@ export default defineEventHandler(async (event) => {
       .orderBy(asc(availability.dayOfWeek));
 
     // Fetch all overrides in range
-    const startStr = format(tomorrow, 'yyyy-MM-dd');
-    const endStr = format(endDate, 'yyyy-MM-dd');
-
     const overrides = await db
       .select()
       .from(availabilityOverrides)
@@ -54,12 +83,15 @@ export default defineEventHandler(async (event) => {
       ));
 
     // Fetch all bookings in range (pending + confirmed)
+    const rangeStart = new Date(startStr + 'T00:00:00Z');
+    const rangeEnd = new Date(endStr + 'T23:59:59.999Z');
+
     const existingBookings = await db
       .select()
       .from(bookings)
       .where(and(
-        gte(bookings.bookingDate, tomorrow),
-        lte(bookings.bookingDate, endDate),
+        gte(bookings.bookingDate, rangeStart),
+        lte(bookings.bookingDate, rangeEnd),
         or(eq(bookings.status, 'confirmed'), eq(bookings.status, 'pending'))
       ));
 
@@ -82,13 +114,16 @@ export default defineEventHandler(async (event) => {
       overridesByDate.set(o.date, dateOverrides);
     }
 
-    // Build bookings map by date string
+    // Build bookings map by date string (extract YYYY-MM-DD from bookingDate)
     const bookingsByDate = new Map<string, typeof existingBookings>();
     for (const b of existingBookings) {
-      const dateStr = format(b.bookingDate, 'yyyy-MM-dd');
-      const dateBookings = bookingsByDate.get(dateStr) || [];
+      // bookingDate is a timestamp — extract the date part safely
+      const bDate = b.bookingDate instanceof Date
+        ? b.bookingDate.toISOString().split('T')[0]
+        : String(b.bookingDate).split('T')[0];
+      const dateBookings = bookingsByDate.get(bDate) || [];
       dateBookings.push(b);
-      bookingsByDate.set(dateStr, dateBookings);
+      bookingsByDate.set(bDate, dateBookings);
     }
 
     // Process each date
@@ -98,9 +133,8 @@ export default defineEventHandler(async (event) => {
       hasAvailableSlots: boolean;
     }> = [];
 
-    for (const date of allDates) {
-      const dateStr = format(date, 'yyyy-MM-dd');
-      const dayOfWeek = date.getDay();
+    for (const dateStr of allDateStrs) {
+      const dayOfWeek = dayOfWeekFromDateStr(dateStr);
       const dateOverrides = overridesByDate.get(dateStr) || [];
 
       let daySlots: Array<{ startTime: string; endTime: string }> = [];

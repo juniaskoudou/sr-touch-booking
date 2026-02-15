@@ -12,9 +12,9 @@ import {
 } from '@/components/ui/dialog';
 import WeekCalendar from '@/components/admin/WeekCalendar.vue';
 import { t } from '@/lib/translations';
-import { format, addDays, eachDayOfInterval, startOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { CalendarDays, List, Settings, Plus, Trash2, Save, Check, CheckCircle, XCircle, Clock, CalendarClock } from 'lucide-vue-next';
+import { CalendarDays, List, CheckCircle, XCircle, Clock, CalendarClock } from 'lucide-vue-next';
 
 definePageMeta({
   layout: 'admin',
@@ -109,6 +109,11 @@ const handleBookingAction = async (action: 'confirm' | 'cancel' | 'complete', bo
     // Refresh lists
     await fetchBookings();
     calendarRef.value?.fetchWeek?.();
+
+    // Warn admin if confirmation email failed to send
+    if (action === 'confirm' && updated.emailSent === false) {
+      actionError.value = '⚠️ La réservation a été confirmée mais l\'email de confirmation n\'a pas pu être envoyé au client.';
+    }
   } catch (err: any) {
     console.error(`Error ${action} booking:`, err);
     actionError.value = err.data?.message || `Erreur lors de l'action`;
@@ -143,6 +148,11 @@ const handleReschedule = async () => {
     showRescheduleModal.value = false;
     await fetchBookings();
     calendarRef.value?.fetchWeek?.();
+
+    // Warn admin if confirmation email failed to send after reschedule
+    if (updated.emailSent === false) {
+      actionError.value = '⚠️ La réservation a été reportée mais l\'email de confirmation n\'a pas pu être envoyé au client.';
+    }
   } catch (err: any) {
     console.error('Error rescheduling booking:', err);
     actionError.value = err.data?.message || 'Erreur lors du report';
@@ -151,131 +161,7 @@ const handleReschedule = async () => {
   }
 };
 
-// ──────────────────────────────────────
-// Default schedule modal
-// ──────────────────────────────────────
-
-const showDefaultsModal = ref(false);
-const savingDefaults = ref(false);
-const defaultsSaved = ref(false);
-
-const DAYS_CONFIG = [
-  { key: 1, label: 'Lundi' },
-  { key: 2, label: 'Mardi' },
-  { key: 3, label: 'Mercredi' },
-  { key: 4, label: 'Jeudi' },
-  { key: 5, label: 'Vendredi' },
-  { key: 6, label: 'Samedi' },
-  { key: 0, label: 'Dimanche' },
-];
-
-interface AvailSlot { startTime: string; endTime: string; }
-interface DaySchedule { enabled: boolean; slots: AvailSlot[]; }
-type DefaultSchedule = Record<number, DaySchedule>;
-
-const defaultSchedule = ref<DefaultSchedule>({});
 const calendarRef = ref<InstanceType<typeof WeekCalendar> | null>(null);
-
-const fetchDefaults = async () => {
-  try {
-    const data = await $fetch<any[]>('/api/admin/availability');
-    const s: DefaultSchedule = {};
-    for (const d of DAYS_CONFIG) s[d.key] = { enabled: false, slots: [] };
-    for (const record of data) {
-      if (s[record.dayOfWeek]) {
-        s[record.dayOfWeek].enabled = record.isAvailable;
-        s[record.dayOfWeek].slots.push({
-          startTime: record.startTime.substring(0, 5),
-          endTime: record.endTime.substring(0, 5),
-        });
-      }
-    }
-    for (const d of DAYS_CONFIG) {
-      if (s[d.key].slots.length === 0) s[d.key].enabled = false;
-    }
-    defaultSchedule.value = s;
-  } catch (err) {
-    console.error('Error fetching defaults:', err);
-  }
-};
-
-const openDefaultsModal = () => {
-  fetchDefaults();
-  showDefaultsModal.value = true;
-};
-
-const toggleDefault = (dayKey: number) => {
-  const day = defaultSchedule.value[dayKey];
-  day.enabled = !day.enabled;
-  if (day.enabled && day.slots.length === 0) {
-    day.slots.push({ startTime: '09:00', endTime: '18:00' });
-  }
-};
-
-const addDefaultSlot = (dayKey: number) => {
-  const day = defaultSchedule.value[dayKey];
-  const last = day.slots[day.slots.length - 1];
-  let start = '14:00';
-  let end = '18:00';
-  if (last) {
-    const [h] = last.endTime.split(':').map(Number);
-    start = `${Math.min(h + 1, 22).toString().padStart(2, '0')}:00`;
-    end = `${Math.min(h + 5, 23).toString().padStart(2, '0')}:00`;
-  }
-  day.slots.push({ startTime: start, endTime: end });
-};
-
-const removeDefaultSlot = (dayKey: number, idx: number) => {
-  const day = defaultSchedule.value[dayKey];
-  day.slots.splice(idx, 1);
-  if (day.slots.length === 0) day.enabled = false;
-};
-
-const applyTemplate = (name: string) => {
-  const s: DefaultSchedule = {};
-  for (const d of DAYS_CONFIG) s[d.key] = { enabled: false, slots: [] };
-  if (name === 'classic') {
-    for (const k of [1, 2, 3, 4, 5]) {
-      s[k] = { enabled: true, slots: [{ startTime: '09:00', endTime: '12:00' }, { startTime: '14:00', endTime: '19:00' }] };
-    }
-    s[6] = { enabled: true, slots: [{ startTime: '09:00', endTime: '17:00' }] };
-  } else if (name === 'full') {
-    for (const k of [1, 2, 3, 4, 5, 6]) {
-      s[k] = { enabled: true, slots: [{ startTime: '09:00', endTime: '19:00' }] };
-    }
-  } else if (name === 'light') {
-    for (const k of [1, 2, 3, 4, 5]) {
-      s[k] = { enabled: true, slots: [{ startTime: '10:00', endTime: '18:00' }] };
-    }
-  }
-  defaultSchedule.value = s;
-};
-
-const saveDefaults = async () => {
-  const slots: Array<{ dayOfWeek: number; startTime: string; endTime: string; isAvailable: boolean }> = [];
-  for (const d of DAYS_CONFIG) {
-    const ds = defaultSchedule.value[d.key];
-    if (!ds?.enabled) continue;
-    for (const slot of ds.slots) {
-      slots.push({ dayOfWeek: d.key, startTime: slot.startTime, endTime: slot.endTime, isAvailable: true });
-    }
-  }
-  try {
-    savingDefaults.value = true;
-    await $fetch('/api/admin/availability', { method: 'PUT', body: { slots } });
-    defaultsSaved.value = true;
-    setTimeout(() => {
-      defaultsSaved.value = false;
-      showDefaultsModal.value = false;
-    }, 1200);
-    // Refresh calendar
-    calendarRef.value?.fetchWeek?.();
-  } catch (err) {
-    console.error('Error saving defaults:', err);
-  } finally {
-    savingDefaults.value = false;
-  }
-};
 
 // ──────────────────────────────────────
 // Init
@@ -286,6 +172,22 @@ const initialWeek = computed(() => {
   const w = route.query.week as string | undefined;
   return w || undefined;
 });
+
+// Auto-open booking modal when navigated with bookingId query param
+const autoOpenHandled = ref(false);
+const tryAutoOpenBooking = () => {
+  const bookingId = route.query.bookingId;
+  if (!bookingId || autoOpenHandled.value) return;
+
+  const id = parseInt(bookingId as string);
+  const found = bookings.value.find((b: any) => b.id === id);
+  if (found) {
+    autoOpenHandled.value = true;
+    onBookingClick(found);
+  }
+};
+
+watch(bookings, () => tryAutoOpenBooking());
 
 onMounted(() => {
   fetchBookings();
@@ -302,10 +204,10 @@ onMounted(() => {
       </div>
 
       <div class="flex items-center gap-2">
-        <!-- Default schedule button -->
-        <Button variant="outline" size="sm" @click="openDefaultsModal" class="gap-1.5 text-xs text-muted-foreground">
-          <Settings class="h-3.5 w-3.5" />
-          Horaires par défaut
+        <!-- Opening hours link -->
+        <Button variant="outline" size="sm" @click="navigateTo('/admin/hours')" class="gap-1.5 text-xs text-muted-foreground">
+          <Clock class="h-3.5 w-3.5" />
+          Horaires d'ouverture
         </Button>
 
         <!-- View Toggle -->
@@ -573,112 +475,5 @@ onMounted(() => {
       </DialogContent>
     </Dialog>
 
-    <!-- ===== DEFAULT SCHEDULE MODAL ===== -->
-    <Dialog v-model:open="showDefaultsModal">
-      <DialogContent class="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Horaires par défaut</DialogTitle>
-          <DialogDescription>
-            Ces horaires s'appliquent automatiquement chaque semaine. Cliquez sur un jour dans le calendrier pour modifier ponctuellement.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div class="space-y-4 mt-2">
-          <!-- Quick templates -->
-          <div>
-            <div class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Modèles</div>
-            <div class="flex gap-2 flex-wrap">
-              <button
-                @click="applyTemplate('classic')"
-                class="px-2.5 py-1 text-xs rounded-md border border-border/50 text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-              >
-                Classique
-              </button>
-              <button
-                @click="applyTemplate('full')"
-                class="px-2.5 py-1 text-xs rounded-md border border-border/50 text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-              >
-                Journée continue
-              </button>
-              <button
-                @click="applyTemplate('light')"
-                class="px-2.5 py-1 text-xs rounded-md border border-border/50 text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-              >
-                Semaine légère
-              </button>
-            </div>
-          </div>
-
-          <!-- Day rows -->
-          <div class="space-y-1.5">
-            <div
-              v-for="day in DAYS_CONFIG"
-              :key="day.key"
-              :class="[
-                'rounded-lg border p-3 transition-all',
-                defaultSchedule[day.key]?.enabled ? 'border-border bg-background' : 'border-border/30 bg-accent/10',
-              ]"
-            >
-              <div class="flex items-start gap-3">
-                <button @click="toggleDefault(day.key)" class="flex items-center gap-2 min-w-[110px] pt-0.5">
-                  <div
-                    :class="[
-                      'relative w-8 h-[18px] rounded-full transition-colors shrink-0',
-                      defaultSchedule[day.key]?.enabled ? 'bg-primary' : 'bg-muted-foreground/20',
-                    ]"
-                  >
-                    <div
-                      :class="[
-                        'absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform',
-                        defaultSchedule[day.key]?.enabled ? 'translate-x-[16px]' : 'translate-x-[2px]',
-                      ]"
-                    />
-                  </div>
-                  <span :class="['text-xs font-medium', defaultSchedule[day.key]?.enabled ? 'text-foreground' : 'text-muted-foreground']">
-                    {{ day.label }}
-                  </span>
-                </button>
-
-                <div v-if="defaultSchedule[day.key]?.enabled" class="flex-1 space-y-1.5">
-                  <div
-                    v-for="(slot, idx) in defaultSchedule[day.key].slots"
-                    :key="idx"
-                    class="flex items-center gap-1.5"
-                  >
-                    <TimePicker v-model="slot.startTime" />
-                    <span class="text-[10px] text-muted-foreground">à</span>
-                    <TimePicker v-model="slot.endTime" />
-                    <button
-                      v-if="defaultSchedule[day.key].slots.length > 1"
-                      @click="removeDefaultSlot(day.key, idx)"
-                      class="p-1 text-muted-foreground hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 class="h-3 w-3" />
-                    </button>
-                  </div>
-                  <button
-                    @click="addDefaultSlot(day.key)"
-                    class="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <Plus class="h-2.5 w-2.5" />
-                    Créneau
-                  </button>
-                </div>
-                <div v-else class="text-xs text-muted-foreground italic pt-0.5">Fermé</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="flex gap-2 pt-2">
-            <Button @click="saveDefaults" :disabled="savingDefaults" class="flex-1 gap-2">
-              <Check v-if="defaultsSaved" class="h-4 w-4" />
-              <Save v-else class="h-4 w-4" />
-              {{ savingDefaults ? 'Enregistrement...' : defaultsSaved ? 'Enregistré !' : 'Enregistrer' }}
-            </Button>
-            <Button variant="ghost" @click="showDefaultsModal = false">Fermer</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
   </div>
 </template>

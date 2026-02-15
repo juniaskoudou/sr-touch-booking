@@ -42,13 +42,19 @@ const handleSendMagicLink = async () => {
     });
 
     if (res.error) {
-      error.value = 'Adresse email non autorisée.';
+      const status = res.error.status;
+      if (status === 403) {
+        error.value = 'Adresse email non autorisée.';
+      } else {
+        error.value = res.error.message || 'Une erreur est survenue. Veuillez réessayer.';
+      }
+      console.error('Magic link error:', res.error);
       return;
     }
 
     sent.value = true;
   } catch (err: any) {
-    error.value = 'Adresse email non autorisée.';
+    error.value = 'Une erreur est survenue. Veuillez réessayer.';
     console.error('Error sending magic link:', err);
   } finally {
     sending.value = false;

@@ -25,6 +25,8 @@ const stats = ref({
   upcomingBookings: 0,
   totalBookings: 0,
   firstUpcomingDate: null as string | null,
+  firstPendingBookingId: null as number | null,
+  firstPendingBookingDate: null as string | null,
 });
 
 const recentBookings = ref<any[]>([]);
@@ -116,6 +118,11 @@ const handleBookingAction = async (action: 'confirm' | 'cancel' | 'complete', bo
     selectedBooking.value = { ...selectedBooking.value, ...updated };
     await fetchRecentBookings();
     await fetchStats();
+
+    // Warn admin if confirmation email failed to send
+    if (action === 'confirm' && updated.emailSent === false) {
+      actionError.value = '⚠️ La réservation a été confirmée mais l\'email de confirmation n\'a pas pu être envoyé au client.';
+    }
   } catch (err: any) {
     console.error(`Error ${action} booking:`, err);
     actionError.value = err.data?.message || `Erreur lors de l'action`;
@@ -150,6 +157,11 @@ const handleReschedule = async () => {
     showRescheduleModal.value = false;
     await fetchRecentBookings();
     await fetchStats();
+
+    // Warn admin if confirmation email failed to send after reschedule
+    if (updated.emailSent === false) {
+      actionError.value = '⚠️ La réservation a été reportée mais l\'email de confirmation n\'a pas pu être envoyé au client.';
+    }
   } catch (err: any) {
     console.error('Error rescheduling booking:', err);
     actionError.value = err.data?.message || 'Erreur lors du report';
@@ -176,7 +188,13 @@ onMounted(() => {
     <div
       v-if="stats.pendingBookings > 0"
       class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between cursor-pointer hover:bg-amber-100 transition-colors"
-      @click="navigateTo('/admin/bookings')"
+      @click="navigateTo({
+        path: '/admin/bookings',
+        query: {
+          ...(stats.firstPendingBookingDate ? { week: new Date(stats.firstPendingBookingDate).toISOString().substring(0, 10) } : {}),
+          ...(stats.firstPendingBookingId ? { bookingId: stats.firstPendingBookingId } : {}),
+        },
+      })"
     >
       <div class="flex items-center gap-3">
         <div class="p-2 rounded-full bg-amber-100">

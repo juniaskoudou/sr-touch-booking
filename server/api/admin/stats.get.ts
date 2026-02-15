@@ -15,7 +15,8 @@ export default defineEventHandler(async (event) => {
     const pendingBookings = await db
       .select()
       .from(bookings)
-      .where(eq(bookings.status, 'pending'));
+      .where(eq(bookings.status, 'pending'))
+      .orderBy(asc(bookings.bookingDate));
 
     // Today's bookings (confirmed only)
     const todayBookings = await db
@@ -54,6 +55,8 @@ export default defineEventHandler(async (event) => {
       upcomingBookings: upcomingBookings.length,
       totalBookings: totalBookings.length,
       firstUpcomingDate: upcomingBookings.length > 0 ? upcomingBookings[0].bookingDate : null,
+      firstPendingBookingId: pendingBookings.length > 0 ? pendingBookings[0].id : null,
+      firstPendingBookingDate: pendingBookings.length > 0 ? pendingBookings[0].bookingDate : null,
     };
   } catch (error) {
     throw createError({

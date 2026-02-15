@@ -30,8 +30,7 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    const bookingDate = new Date(date);
-    const slots = await getAvailableTimeSlots(bookingDate, service[0].durationMinutes);
+    const slots = await getAvailableTimeSlots(date, service[0].durationMinutes);
 
     return slots;
   } catch (error: any) {

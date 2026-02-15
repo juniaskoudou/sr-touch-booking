@@ -1,5 +1,5 @@
 import { db } from '../../../database';
-import { bookings, services } from '../../../database/schema';
+import { bookings, services, emailLogs } from '../../../database/schema';
 import { eq } from 'drizzle-orm';
 import { sendConfirmationEmail } from '../../../utils/email';
 import { z } from 'zod';
@@ -92,18 +92,40 @@ export default defineEventHandler(async (event) => {
       .returning();
 
     // Send confirmation email when booking is confirmed
+    let emailSent = false;
     if (data.action === 'confirm' || data.action === 'reschedule') {
       const baseUrl = process.env.BASE_URL || getRequestURL(event).origin;
       const bookingUrl = `${baseUrl}/booking/${currentBooking.token}`;
 
       try {
-        await sendConfirmationEmail(updated, service, bookingUrl);
+        const emailResult = await sendConfirmationEmail(updated, service, bookingUrl);
+        emailSent = emailResult.success;
+
+        // Log email result to database
+        await db.insert(emailLogs).values({
+          bookingId: updated.id,
+          emailType: 'confirmation',
+          status: emailResult.success ? 'sent' : 'failed',
+          errorMessage: emailResult.success ? null : String(emailResult.error),
+        });
+
+        if (!emailResult.success) {
+          console.error('Confirmation email failed for booking', updated.id, ':', emailResult.error);
+        }
       } catch (emailErr) {
         console.error('Email sending failed after admin action:', emailErr);
+
+        // Log the failure
+        await db.insert(emailLogs).values({
+          bookingId: updated.id,
+          emailType: 'confirmation',
+          status: 'failed',
+          errorMessage: String(emailErr),
+        }).catch(() => {}); // Don't fail the whole request if logging fails
       }
     }
 
-    return updated;
+    return { ...updated, emailSent };
   } catch (error: any) {
     if (error.statusCode) throw error;
     if (error instanceof z.ZodError) {

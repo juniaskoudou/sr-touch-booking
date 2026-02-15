@@ -1,11 +1,21 @@
 import { db } from '../database';
 import { availability, availabilityOverrides, bookings } from '../database/schema';
 import { eq, and, gte, lte, or } from 'drizzle-orm';
-import { format, addMinutes, parse } from 'date-fns';
+import { addMinutes, parse, format } from 'date-fns';
 
 export interface TimeSlot {
   time: string;
   available: boolean;
+}
+
+/**
+ * Compute day-of-week from a YYYY-MM-DD string (0=Sun … 6=Sat)
+ * without going through a Date object (timezone-safe).
+ */
+function dayOfWeekFromDateStr(dateStr: string): number {
+  // Parse as noon UTC to avoid any timezone day-shift
+  const d = new Date(dateStr + 'T12:00:00Z');
+  return d.getUTCDay();
 }
 
 /**
@@ -15,10 +25,11 @@ export interface TimeSlot {
  * 1. Check for date-specific overrides (closed day or custom hours)
  * 2. Fall back to recurring weekly schedule
  * 3. Subtract already-booked slots
+ *
+ * @param dateStr  The date as a YYYY-MM-DD string (timezone-safe)
  */
-export async function getAvailableTimeSlots(date: Date, serviceDurationMinutes: number) {
-  const dateStr = format(date, 'yyyy-MM-dd');
-  const dayOfWeek = date.getDay();
+export async function getAvailableTimeSlots(dateStr: string, serviceDurationMinutes: number) {
+  const dayOfWeek = dayOfWeekFromDateStr(dateStr);
 
   // 1. Check for date-specific overrides (may be multiple rows — one per slot)
   const overrides = await db
@@ -69,11 +80,9 @@ export async function getAvailableTimeSlots(date: Date, serviceDurationMinutes: 
     return [];
   }
 
-  // 3. Get existing bookings for this date
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  // 3. Get existing bookings for this date (use noon UTC to avoid timezone shifts)
+  const startOfDay = new Date(dateStr + 'T00:00:00Z');
+  const endOfDay = new Date(dateStr + 'T23:59:59.999Z');
 
   // Block slots for both pending and confirmed bookings
   const existingBookings = await db

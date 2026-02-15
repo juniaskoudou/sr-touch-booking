@@ -9,6 +9,17 @@ function isAllowedEmail(email: string): boolean {
   return !!allowed && email.toLowerCase() === allowed.toLowerCase();
 }
 
+// Resolve the base URL: explicit BASE_URL > NUXT_BASE_URL > Vercel auto-URL > localhost
+function getBaseURL(): string {
+  if (process.env.BASE_URL) return process.env.BASE_URL;
+  if (process.env.NUXT_BASE_URL) return process.env.NUXT_BASE_URL;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return 'http://localhost:3000';
+}
+
+const baseURL = getBaseURL();
+
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: 'pg',
@@ -16,6 +27,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: false,
   },
+  trustedOrigins: [baseURL],
   plugins: [
     magicLink({
       sendMagicLink: async ({ email, url }) => {
@@ -77,6 +89,6 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // 1 day
   },
-  baseURL: process.env.BASE_URL || process.env.NUXT_BASE_URL || 'http://localhost:3000',
+  baseURL,
   basePath: '/api/auth',
 });
